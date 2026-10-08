@@ -14,7 +14,7 @@ st.markdown("""
     footer {visibility: hidden;}
     .block-container {padding-top: 1rem; padding-bottom: 2rem;}
     </style>
-""", unsafe_allow_keywords=True)
+""", unsafe_allow_html=True)
 
 # Inicializar cliente de Supabase desde los Secrets
 @st.cache_resource
@@ -26,7 +26,7 @@ def init_supabase() -> Client:
 supabase = init_supabase()
 
 # Sistema de PIN
-PIN_CORRECTO = "8411"  # Puedes cambiar este PIN si lo deseas
+PIN_CORRECTO = "1234"  # Puedes cambiar este PIN si lo deseas
 
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
