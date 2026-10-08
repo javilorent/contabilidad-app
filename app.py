@@ -1,146 +1,100 @@
-import sqlite3
-from datetime import date
-import pandas as pd
 import streamlit as st
+import pandas as pd
+from datetime import datetime
+from supabase import create_client, Client
 
-# PIN de acceso (Cámbialo por el PIN que queráis utilizar)
-PIN_CORRECTO = "8411"
+# Configuración de página móvil
+st.set_page_config(page_title="Contabilidad Familiar", page_icon="💰", layout="centered")
 
-# Configuración de la página para dispositivos móviles
-st.set_page_config(
-    page_title="Contabilidad", page_icon="💰", layout="centered"
-)
+# Ocultar barra superior y menú para estética de App móvil
+st.markdown("""
+    <style>
+    #MainMenu {visibility: hidden;}
+    header {visibility: hidden;}
+    footer {visibility: hidden;}
+    .block-container {padding-top: 1rem; padding-bottom: 2rem;}
+    </style>
+""", unsafe_allow_keywords=True)
 
+# Inicializar cliente de Supabase desde los Secrets
+@st.cache_resource
+def init_supabase() -> Client:
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
 
-# --- CONTROL DE ACCESO MEDIANTE PIN ---
+supabase = init_supabase()
+
+# Sistema de PIN
+PIN_CORRECTO = "1234"  # Puedes cambiar este PIN si lo deseas
+
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
 
 if not st.session_state["autenticado"]:
-    st.title("🔒 Acceso Privado")
-    pin_introducido = st.text_input(
-        "Introduce el PIN de acceso:", type="password"
-    )
-
-    if st.button("Entrar", type="primary"):
-        if pin_introducido == PIN_CORRECTO:
+    st.title("🔒 Acceso Restringido")
+    pin_input = st.text_input("Introduce tu PIN para acceder", type="password")
+    if st.button("Entrar", use_container_width=True):
+        if pin_input == PIN_CORRECTO:
             st.session_state["autenticado"] = True
             st.rerun()
         else:
-            st.error("PIN incorrecto. Inténtalo de nuevo.")
-    st.stop()  # Detiene la ejecución si no está autenticado
+            st.error("PIN incorrecto")
+    st.stop()
 
+# --- APLICACIÓN PRINCIPAL ---
+st.title("💰 Contabilidad")
 
-# --- INICIALIZACIÓN DE LA BASE DE DATOS LOCAL ---
-conn = sqlite3.connect("contabilidad.db", check_same_thread=False)
-cursor = conn.cursor()
-cursor.execute(
-    """
-    CREATE TABLE IF NOT EXISTS movimientos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        fecha TEXT,
-        tipo TEXT,
-        concepto TEXT,
-        monto REAL
-    )
-"""
-)
-conn.commit()
+tab1, tab2 = st.tabs(["📝 Registrar", "📊 Historial"])
 
+with tab1:
+    st.subheader("Nuevo Registro")
+    
+    with st.form("form_gastos", clear_on_submit=True):
+        fecha = st.date_input("Fecha", datetime.now())
+        tipo = st.selectbox("Tipo de movimiento", ["Gasto", "Ingreso"])
+        concepto = st.text_input("Concepto / Descripción")
+        monto = st.number_input("Importe (€)", min_value=0.01, step=0.50, format="%.2f")
+        
+        submitted = st.form_submit_button("Guardar Movimiento", use_container_width=True)
+        
+        if submitted:
+            if concepto.strip() == "":
+                st.warning("Por favor, escribe un concepto.")
+            else:
+                data = {
+                    "fecha": str(fecha),
+                    "tipo": tipo,
+                    "concepto": concepto.strip(),
+                    "monto": float(monto)
+                }
+                supabase.table("movimientos").insert(data).execute()
+                st.success(f"✅ {tipo} registrado correctamente.")
 
-# --- CÁLCULO Y MUESTRA DEL SALDO ---
-df_total = pd.read_sql_query("SELECT tipo, monto FROM movimientos", conn)
-ingresos = (
-    df_total[df_total["tipo"] == "Ingreso"]["monto"].sum()
-    if not df_total.empty
-    else 0.0
-)
-gastos = (
-    df_total[df_total["tipo"] == "Gasto"]["monto"].sum()
-    if not df_total.empty
-    else 0.0
-)
-saldo = ingresos - gastos
-
-st.title("📱 Contabilidad Diaria")
-st.metric(label="Saldo Actual Total", value=f"{saldo:,.2f} €".replace(",", "X").replace(".", ",").replace("X", "."))
-
-st.divider()
-
-
-# --- FORMULARIO PARA REGISTRAR MOVIMIENTOS ---
-st.subheader("➕ Añadir Movimiento")
-
-with st.form("nuevo_registro", clear_on_submit=True):
-    fecha = st.date_input("Fecha", date.today())
-    tipo = st.radio("Tipo de movimiento", ["Ingreso", "Gasto"], horizontal=True)
-    concepto = st.text_input(
-        "Concepto / Detalle", placeholder="Ej. Cobro cliente, Gasolina, Supermercado..."
-    )
-    monto = st.number_input("Importe (€)", min_value=0.0, step=1.0, format="%.2f")
-
-    guardar = st.form_submit_button("Guardar Registro", type="primary")
-
-    if guardar:
-        if monto > 0:
-            cursor.execute(
-                "INSERT INTO movimientos (fecha, tipo, concepto, monto) VALUES (?, ?, ?, ?)",
-                (fecha.strftime("%Y-%m-%d"), tipo, concepto, monto),
-            )
-            conn.commit()
-            st.success("✅ Guardado correctamente")
-            st.rerun()
-        else:
-            st.warning("Introduce un importe mayor que 0.")
-
-st.divider()
-
-
-# --- HISTORIAL Y EDICIÓN DE DÍAS ANTERIORES ---
-st.subheader("📋 Historial y Edición")
-
-df_historial = pd.read_sql_query(
-    "SELECT id, fecha, tipo, concepto, monto FROM movimientos ORDER BY fecha DESC, id DESC",
-    conn,
-)
-
-if not df_historial.empty:
-    st.caption(
-        "Puedes modificar cualquier casilla directamente en la tabla o borrar filas seleccionándolas."
-    )
-
-    df_editado = st.data_editor(
-        df_historial,
-        num_rows="dynamic",
-        key="editor_tabla",
-        disabled=["id"],
-        use_container_width=True,
-        column_config={
-            "id": "ID",
-            "fecha": st.column_config.DateColumn("Fecha", format="DD/MM/YYYY"),
-            "tipo": st.column_config.SelectboxColumn(
-                "Tipo", options=["Ingreso", "Gasto"]
-            ),
-            "concepto": st.column_config.TextColumn("Concepto"),
-            "monto": st.column_config.NumberColumn("Importe (€)", format="%.2f €"),
-        },
-    )
-
-    if st.button("💾 Aplicar Cambios Realizados"):
-        cursor.execute("DELETE FROM movimientos")
-        for _, row in df_editado.iterrows():
-            cursor.execute(
-                "INSERT INTO movimientos (id, fecha, tipo, concepto, monto) VALUES (?, ?, ?, ?, ?)",
-                (
-                    row["id"],
-                    str(row["fecha"]),
-                    row["tipo"],
-                    row["concepto"],
-                    row["monto"],
-                ),
-            )
-        conn.commit()
-        st.success("✅ Historial actualizado")
-        st.rerun()
-else:
-    st.info("Aún no hay movimientos registrados.")
+with tab2:
+    st.subheader("Historial de Movimientos")
+    
+    response = supabase.table("movimientos").select("*").order("fecha", desc=True).execute()
+    datos = response.data
+    
+    if datos:
+        df = pd.DataFrame(datos)
+        
+        # Balance global
+        ingresos = df[df["tipo"] == "Ingreso"]["monto"].sum()
+        gastos = df[df["tipo"] == "Gasto"]["monto"].sum()
+        balance = ingresos - gastos
+        
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Ingresos", f"{ingresos:.2f} €")
+        col2.metric("Gastos", f"{gastos:.2f} €")
+        col3.metric("Balance", f"{balance:.2f} €")
+        
+        st.divider()
+        
+        # Formatear tabla
+        df_mostrar = df[["fecha", "tipo", "concepto", "monto"]].copy()
+        df_mostrar.columns = ["Fecha", "Tipo", "Concepto", "Importe (€)"]
+        st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
+    else:
+        st.info("Aún no hay movimientos registrados.")
