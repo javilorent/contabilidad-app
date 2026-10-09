@@ -6,7 +6,7 @@ from supabase import create_client, Client
 # Configuración de página móvil
 st.set_page_config(page_title="Contabilidad Familiar", page_icon="💰", layout="centered")
 
-# CSS e inyección JS forzada para iOS / Android
+# CSS e inyección JS forzada para teclado numérico e indicación de input libre
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -46,7 +46,7 @@ except Exception:
     st.stop()
 
 # Sistema de PIN
-PIN_CORRECTO = "8411"
+PIN_CORRECTO = "1234"
 
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
@@ -103,17 +103,19 @@ with tab1:
         tipo = st.selectbox("Tipo de movimiento", ["Gasto", "Ingreso"])
         concepto = st.text_input("Concepto / Descripción")
         
-        # Campo de texto optimizado para teclado numérico
-        monto_str = st.text_input("Importe (€)", value="1.00", placeholder="0.00", key="monto_input")
+        # Casilla vacía por defecto para escribir directamente sin borrar nada
+        monto_str = st.text_input("Importe (€)", value="", placeholder="0.00", key="monto_input")
         
         submitted = st.form_submit_button("Guardar Movimiento", use_container_width=True)
         
         if submitted:
             if concepto.strip() == "":
                 st.warning("Por favor, escribe un concepto.")
+            elif monto_str.strip() == "":
+                st.warning("Por favor, escribe un importe.")
             else:
                 try:
-                    # Remplazar coma por punto si se introduce con formato europeo
+                    # Remplazar coma por punto para aceptar decimales españoles
                     monto_val = float(monto_str.replace(",", "."))
                     if monto_val <= 0:
                         st.warning("El importe debe ser mayor a 0.")
