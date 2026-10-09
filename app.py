@@ -23,7 +23,11 @@ def init_supabase() -> Client:
     key = st.secrets["SUPABASE_KEY"]
     return create_client(url, key)
 
-supabase = init_supabase()
+try:
+    supabase = init_supabase()
+except Exception as e:
+    st.error("Error al conectar con la base de datos. Revisa los Secrets en Streamlit Cloud.")
+    st.stop()
 
 # Sistema de PIN
 PIN_CORRECTO = "1234"
@@ -49,10 +53,10 @@ st.title("💰 Contabilidad Familiar")
 try:
     response = supabase.table("movimientos").select("*").order("fecha", desc=True).execute()
     datos = response.data or []
-except Exception as e:
+except Exception:
     datos = []
 
-# Calcular Totales Globale
+# Calcular Totales Globales
 if datos:
     df = pd.DataFrame(datos)
     ingresos = df[df["tipo"] == "Ingreso"]["monto"].sum() if "tipo" in df.columns else 0.0
@@ -64,8 +68,8 @@ else:
 
 saldo_total = ingresos - gastos
 
-# --- TARJETA DE SALDO PRINCIPAL (Siempre visible arriba) ---
-st.metric("Saldo Actual", f"{saldo_total:.2f} €", delta=f"{ingresos - gastos:.2f} €" if datos else None)
+# --- TARJETA DE SALDO PRINCIPAL ---
+st.metric("Saldo Actual", f"{saldo_total:.2f} €")
 
 col1, col2 = st.columns(2)
 col1.metric("Total Ingresos", f"{ingresos:.2f} €")
@@ -73,7 +77,6 @@ col2.metric("Total Gastos", f"{gastos:.2f} €")
 
 st.divider()
 
-# Pestañas para Registrar u Ordinar Movimientos
 tab1, tab2 = st.tabs(["📝 Registrar", "📊 Historial"])
 
 with tab1:
