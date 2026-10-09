@@ -30,7 +30,7 @@ except Exception as e:
     st.stop()
 
 # Sistema de PIN
-PIN_CORRECTO = "8411"
+PIN_CORRECTO = "1234"
 
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
@@ -94,15 +94,18 @@ with tab1:
             if concepto.strip() == "":
                 st.warning("Por favor, escribe un concepto.")
             else:
-                data = {
-                    "fecha": fecha.strftime("%Y-%m-%d"),
-                    "tipo": tipo,
-                    "concepto": concepto.strip(),
-                    "monto": float(monto)
-                }
-                supabase.table("movimientos").insert(data).execute()
-                st.success(f"✅ {tipo} registrado correctamente.")
-                st.rerun()
+                try:
+                    data = {
+                        "fecha": fecha.strftime("%Y-%m-%d"),
+                        "tipo": str(tipo),
+                        "concepto": str(concepto.strip()),
+                        "monto": float(monto)
+                    }
+                    supabase.table("movimientos").insert(data).select().execute()
+                    st.success(f"✅ {tipo} registrado correctamente.")
+                    st.rerun()
+                except Exception as err:
+                    st.error(f"Error al guardar en Supabase: {err}")
 
 with tab2:
     st.subheader("Historial de Movimientos")
