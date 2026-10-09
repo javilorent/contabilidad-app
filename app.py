@@ -26,7 +26,7 @@ def init_supabase() -> Client:
 supabase = init_supabase()
 
 # Sistema de PIN
-PIN_CORRECTO = "8411"  # Puedes cambiar este PIN si lo deseas
+PIN_CORRECTO = "1234"
 
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
@@ -63,7 +63,7 @@ with tab1:
                 st.warning("Por favor, escribe un concepto.")
             else:
                 data = {
-                    "fecha": str(fecha),
+                    "fecha": fecha.strftime("%Y-%m-%d"),
                     "tipo": tipo,
                     "concepto": concepto.strip(),
                     "monto": float(monto)
