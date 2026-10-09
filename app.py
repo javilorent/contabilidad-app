@@ -6,25 +6,29 @@ from supabase import create_client, Client
 # Configuración de página móvil
 st.set_page_config(page_title="Contabilidad Familiar", page_icon="💰", layout="centered")
 
-# Inyección de estilos y script para forzar teclado numérico en iOS/Android
+# CSS e inyección JS forzada para iOS / Android
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
     footer {visibility: hidden;}
     .block-container {padding-top: 1rem; padding-bottom: 2rem;}
-    input[type=number] {
-        -moz-appearance: textfield;
-    }
     </style>
     <script>
-    var observer = new MutationObserver(function(mutations) {
-        var inputs = document.querySelectorAll('input[type="number"]');
+    function forceNumericKeyboards() {
+        var inputs = document.querySelectorAll('input[data-testid="stTextInput"]');
         inputs.forEach(function(input) {
-            input.setAttribute('inputmode', 'decimal');
+            if (input.placeholder.includes("0.00") || input.id.includes("monto")) {
+                input.setAttribute('inputmode', 'decimal');
+                input.setAttribute('type', 'number');
+                input.setAttribute('step', 'any');
+                input.setAttribute('pattern', '[0-9]*');
+            }
         });
-    });
+    }
+    var observer = new MutationObserver(forceNumericKeyboards);
     observer.observe(document.body, { childList: true, subtree: true });
+    window.addEventListener('load', forceNumericKeyboards);
     </script>
 """, unsafe_allow_html=True)
 
@@ -95,12 +99,12 @@ with tab1:
     st.subheader("Nuevo Registro")
     
     with st.form("form_gastos", clear_on_submit=True):
-        # Formato de fecha cambiado explícitamente a DD/MM/YYYY
         fecha = st.date_input("Fecha", datetime.now(), format="DD/MM/YYYY")
         tipo = st.selectbox("Tipo de movimiento", ["Gasto", "Ingreso"])
         concepto = st.text_input("Concepto / Descripción")
         
-        monto = st.number_input("Importe (€)", min_value=0.01, value=1.00, step=0.50, format="%.2f")
+        # Campo de texto optimizado para teclado numérico
+        monto_str = st.text_input("Importe (€)", value="1.00", placeholder="0.00", key="monto_input")
         
         submitted = st.form_submit_button("Guardar Movimiento", use_container_width=True)
         
@@ -109,15 +113,22 @@ with tab1:
                 st.warning("Por favor, escribe un concepto.")
             else:
                 try:
-                    data = {
-                        "fecha": fecha.strftime("%Y-%m-%d"),
-                        "tipo": str(tipo),
-                        "concepto": str(concepto.strip()),
-                        "monto": float(monto)
-                    }
-                    supabase.table("movimientos").insert(data).select().execute()
-                    st.success(f"✅ {tipo} registrado correctamente.")
-                    st.rerun()
+                    # Remplazar coma por punto si se introduce con formato europeo
+                    monto_val = float(monto_str.replace(",", "."))
+                    if monto_val <= 0:
+                        st.warning("El importe debe ser mayor a 0.")
+                    else:
+                        data = {
+                            "fecha": fecha.strftime("%Y-%m-%d"),
+                            "tipo": str(tipo),
+                            "concepto": str(concepto.strip()),
+                            "monto": float(monto_val)
+                        }
+                        supabase.table("movimientos").insert(data).select().execute()
+                        st.success(f"✅ {tipo} registrado correctamente.")
+                        st.rerun()
+                except ValueError:
+                    st.error("Introduce un número válido en el importe.")
                 except Exception as err:
                     st.error(f"Error al guardar: {err}")
 
@@ -127,7 +138,6 @@ with tab2:
     if not df.empty:
         df_mostrar = df[["fecha", "tipo", "concepto", "monto"]].copy()
         
-        # Formatear la columna de fecha a DD/MM/AAAA para mostrar
         try:
             df_mostrar["fecha"] = pd.to_datetime(df_mostrar["fecha"]).dt.strftime("%d/%m/%Y")
         except Exception:
@@ -139,7 +149,6 @@ with tab2:
         st.divider()
         st.subheader("🗑️ Eliminar un Apunte")
         
-        # Opciones para borrar con la fecha adaptada a DD/MM/AAAA
         opciones = {}
         for _, row in df.iterrows():
             try:
