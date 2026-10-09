@@ -13,6 +13,10 @@ st.markdown("""
     header {visibility: hidden;}
     footer {visibility: hidden;}
     .block-container {padding-top: 1rem; padding-bottom: 2rem;}
+    /* Ajuste visual para campos numéricos en móvil */
+    input[type=number] {
+        -moz-appearance: textfield;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -25,7 +29,7 @@ def init_supabase() -> Client:
 
 try:
     supabase = init_supabase()
-except Exception as e:
+except Exception:
     st.error("Error al conectar con la base de datos. Revisa los Secrets en Streamlit Cloud.")
     st.stop()
 
@@ -47,7 +51,7 @@ if not st.session_state["autenticado"]:
     st.stop()
 
 # --- APLICACIÓN PRINCIPAL ---
-st.title("💰 Contabilidad Familiar")
+st.title("💰 Contabilidad")
 
 # Obtener datos de Supabase
 try:
@@ -77,7 +81,7 @@ col2.metric("Total Gastos", f"{gastos:.2f} €")
 
 st.divider()
 
-tab1, tab2 = st.tabs(["📝 Registrar", "📊 Historial"])
+tab1, tab2 = st.tabs(["📝 Registrar", "📊 Historial / Gestionar"])
 
 with tab1:
     st.subheader("Nuevo Registro")
@@ -86,7 +90,9 @@ with tab1:
         fecha = st.date_input("Fecha", datetime.now())
         tipo = st.selectbox("Tipo de movimiento", ["Gasto", "Ingreso"])
         concepto = st.text_input("Concepto / Descripción")
-        monto = st.number_input("Importe (€)", min_value=0.01, step=0.50, format="%.2f")
+        
+        # Uso de value y step formateado para forzar teclado numérico en móviles
+        monto = st.number_input("Importe (€)", min_value=0.01, value=1.00, step=0.50, format="%.2f")
         
         submitted = st.form_submit_button("Guardar Movimiento", use_container_width=True)
         
@@ -105,7 +111,7 @@ with tab1:
                     st.success(f"✅ {tipo} registrado correctamente.")
                     st.rerun()
                 except Exception as err:
-                    st.error(f"Error al guardar en Supabase: {err}")
+                    st.error(f"Error al guardar: {err}")
 
 with tab2:
     st.subheader("Historial de Movimientos")
@@ -114,5 +120,25 @@ with tab2:
         df_mostrar = df[["fecha", "tipo", "concepto", "monto"]].copy()
         df_mostrar.columns = ["Fecha", "Tipo", "Concepto", "Importe (€)"]
         st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
+        
+        st.divider()
+        st.subheader("🗑️ Eliminar un Apunte")
+        
+        # Crear lista seleccionable con formato claro
+        opciones = {
+            f"{row['fecha']} | {row['tipo']} | {row['concepto']} ({row['monto']:.2f} €)": row["id"]
+            for _, row in df.iterrows()
+        }
+        
+        seleccion = st.selectbox("Selecciona el registro a borrar:", list(opciones.keys()))
+        
+        if st.button("Eliminar apunte seleccionado", type="primary", use_container_width=True):
+            id_borrar = opciones[seleccion]
+            try:
+                supabase.table("movimientos").delete().eq("id", id_borrar).execute()
+                st.success("🗑️ Apunte eliminado correctamente.")
+                st.rerun()
+            except Exception as err:
+                st.error(f"Error al eliminar: {err}")
     else:
         st.info("Aún no hay movimientos registrados.")
