@@ -46,7 +46,7 @@ except Exception:
     st.stop()
 
 # Sistema de PIN
-PIN_CORRECTO = "1234"
+PIN_CORRECTO = "8411"
 
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
