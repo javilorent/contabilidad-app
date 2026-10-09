@@ -43,8 +43,37 @@ if not st.session_state["autenticado"]:
     st.stop()
 
 # --- APLICACIÓN PRINCIPAL ---
-st.title("💰 Contabilidad")
+st.title("💰 Contabilidad Familiar")
 
+# Obtener datos de Supabase
+try:
+    response = supabase.table("movimientos").select("*").order("fecha", desc=True).execute()
+    datos = response.data or []
+except Exception as e:
+    datos = []
+
+# Calcular Totales Globale
+if datos:
+    df = pd.DataFrame(datos)
+    ingresos = df[df["tipo"] == "Ingreso"]["monto"].sum() if "tipo" in df.columns else 0.0
+    gastos = df[df["tipo"] == "Gasto"]["monto"].sum() if "tipo" in df.columns else 0.0
+else:
+    df = pd.DataFrame()
+    ingresos = 0.0
+    gastos = 0.0
+
+saldo_total = ingresos - gastos
+
+# --- TARJETA DE SALDO PRINCIPAL (Siempre visible arriba) ---
+st.metric("Saldo Actual", f"{saldo_total:.2f} €", delta=f"{ingresos - gastos:.2f} €" if datos else None)
+
+col1, col2 = st.columns(2)
+col1.metric("Total Ingresos", f"{ingresos:.2f} €")
+col2.metric("Total Gastos", f"{gastos:.2f} €")
+
+st.divider()
+
+# Pestañas para Registrar u Ordinar Movimientos
 tab1, tab2 = st.tabs(["📝 Registrar", "📊 Historial"])
 
 with tab1:
@@ -70,29 +99,12 @@ with tab1:
                 }
                 supabase.table("movimientos").insert(data).execute()
                 st.success(f"✅ {tipo} registrado correctamente.")
+                st.rerun()
 
 with tab2:
     st.subheader("Historial de Movimientos")
     
-    response = supabase.table("movimientos").select("*").order("fecha", desc=True).execute()
-    datos = response.data
-    
-    if datos:
-        df = pd.DataFrame(datos)
-        
-        # Balance global
-        ingresos = df[df["tipo"] == "Ingreso"]["monto"].sum()
-        gastos = df[df["tipo"] == "Gasto"]["monto"].sum()
-        balance = ingresos - gastos
-        
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Ingresos", f"{ingresos:.2f} €")
-        col2.metric("Gastos", f"{gastos:.2f} €")
-        col3.metric("Balance", f"{balance:.2f} €")
-        
-        st.divider()
-        
-        # Formatear tabla
+    if not df.empty:
         df_mostrar = df[["fecha", "tipo", "concepto", "monto"]].copy()
         df_mostrar.columns = ["Fecha", "Tipo", "Concepto", "Importe (€)"]
         st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
