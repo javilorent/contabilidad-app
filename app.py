@@ -6,18 +6,26 @@ from supabase import create_client, Client
 # Configuración de página móvil
 st.set_page_config(page_title="Contabilidad Familiar", page_icon="💰", layout="centered")
 
-# Ocultar barra superior y menú para estética de App móvil
+# Inyección de estilos y script para forzar teclado numérico en iOS/Android
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
     footer {visibility: hidden;}
     .block-container {padding-top: 1rem; padding-bottom: 2rem;}
-    /* Ajuste visual para campos numéricos en móvil */
     input[type=number] {
         -moz-appearance: textfield;
     }
     </style>
+    <script>
+    var observer = new MutationObserver(function(mutations) {
+        var inputs = document.querySelectorAll('input[type="number"]');
+        inputs.forEach(function(input) {
+            input.setAttribute('inputmode', 'decimal');
+        });
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    </script>
 """, unsafe_allow_html=True)
 
 # Inicializar cliente de Supabase desde los Secrets
@@ -34,7 +42,7 @@ except Exception:
     st.stop()
 
 # Sistema de PIN
-PIN_CORRECTO = "1234"
+PIN_CORRECTO = "8411"
 
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
@@ -87,11 +95,11 @@ with tab1:
     st.subheader("Nuevo Registro")
     
     with st.form("form_gastos", clear_on_submit=True):
-        fecha = st.date_input("Fecha", datetime.now())
+        # Formato de fecha cambiado explícitamente a DD/MM/YYYY
+        fecha = st.date_input("Fecha", datetime.now(), format="DD/MM/YYYY")
         tipo = st.selectbox("Tipo de movimiento", ["Gasto", "Ingreso"])
         concepto = st.text_input("Concepto / Descripción")
         
-        # Uso de value y step formateado para forzar teclado numérico en móviles
         monto = st.number_input("Importe (€)", min_value=0.01, value=1.00, step=0.50, format="%.2f")
         
         submitted = st.form_submit_button("Guardar Movimiento", use_container_width=True)
@@ -118,17 +126,28 @@ with tab2:
     
     if not df.empty:
         df_mostrar = df[["fecha", "tipo", "concepto", "monto"]].copy()
+        
+        # Formatear la columna de fecha a DD/MM/AAAA para mostrar
+        try:
+            df_mostrar["fecha"] = pd.to_datetime(df_mostrar["fecha"]).dt.strftime("%d/%m/%Y")
+        except Exception:
+            pass
+            
         df_mostrar.columns = ["Fecha", "Tipo", "Concepto", "Importe (€)"]
         st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
         
         st.divider()
         st.subheader("🗑️ Eliminar un Apunte")
         
-        # Crear lista seleccionable con formato claro
-        opciones = {
-            f"{row['fecha']} | {row['tipo']} | {row['concepto']} ({row['monto']:.2f} €)": row["id"]
-            for _, row in df.iterrows()
-        }
+        # Opciones para borrar con la fecha adaptada a DD/MM/AAAA
+        opciones = {}
+        for _, row in df.iterrows():
+            try:
+                fecha_fmt = datetime.strptime(str(row['fecha']), "%Y-%m-%d").strftime("%d/%m/%Y")
+            except Exception:
+                fecha_fmt = str(row['fecha'])
+            key_label = f"{fecha_fmt} | {row['tipo']} | {row['concepto']} ({row['monto']:.2f} €)"
+            opciones[key_label] = row["id"]
         
         seleccion = st.selectbox("Selecciona el registro a borrar:", list(opciones.keys()))
         
